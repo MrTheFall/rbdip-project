@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+env:
+  LAB_NAME: lab1
+  DATABASE_URL: postgresql://bookstore:bookstore@localhost:5432/bookstore
+
+jobs:
+  build-and-check:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: bookstore
+          POSTGRES_PASSWORD: bookstore
+          POSTGRES_DB: bookstore
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bookstore"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Apply migrations
+        id: migrations
+        run: |
+          set +e
+          python scripts/apply_migrations.py
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Lint (flake8)
+        id: lint
+        run: |
+          set +e
+          flake8 app
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Tests with coverage
+        id: tests
+        run: |
+          set +e
+          pytest --cov=app --cov-report=xml --cov-fail-under=60
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Write score.json
+        env:
+          GATE_MIGRATIONS_STATUS: ${{ steps.migrations.outputs.status }}
+          GATE_LINT_STATUS: ${{ steps.lint.outputs.status }}
+          GATE_TESTS_STATUS: ${{ steps.tests.outputs.status }}
+          GATE_COVERAGE_STATUS: ${{ steps.tests.outputs.status }}
+        run: python scripts/write_score.py
+
+      - name: Upload score.json
+        uses: actions/upload-artifact@v4
+        with:
+          name: score
+          path: score.json
+
+      - name: Fail job if any gate failed
+        run: |
+          python - <<'PY'
+          import json, sys
+          data = json.load(open("score.json"))
+          gates = data["gates"]
+          failed = [name for name, passed in gates.items() if passed is False]
+          if failed:
+              print("Failed gates:", ", ".join(failed))
+              sys.exit(1)
+          print("All gates passed.")
+          PY
