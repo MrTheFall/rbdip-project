@@ -24,6 +24,11 @@ def client(app):
 @pytest.fixture(autouse=True)
 def clean_tables(app):
     with app.app_context():
-        db.session.execute(db.text("TRUNCATE reviews, order_items, orders, products RESTART IDENTITY CASCADE"))
+        db.session.execute(
+            db.text(
+                "TRUNCATE reviews, order_items, orders, customers, products "
+                "RESTART IDENTITY CASCADE"
+            )
+        )
         db.session.commit()
     yield

@@ -1,5 +1,5 @@
 from app.db import db
-from app.models import Order, OrderItem, Product
+from app.models import Customer, Order, OrderItem, Product
 from app.pricing import PricingCalculator
 
 
@@ -42,18 +42,29 @@ class OrderValidator:
 
 
 class OrderRepository:
-    """Reads the products referenced by an order and stores the order."""
+    """Reads the products referenced by an order and stores customers and orders."""
 
     def get_product(self, product_id):
         return Product.query.get(product_id)
 
+    def get_or_create_customer(self, full_name, address, phone):
+        customer = Customer.query.filter_by(
+            full_name=full_name, address=address, phone=phone
+        ).first()
+        if customer is None:
+            customer = Customer(full_name=full_name, address=address, phone=phone)
+            db.session.add(customer)
+            db.session.flush()
+        return customer
+
     def save(self, payload, line_items):
-        order = Order(
-            customer_full_name=payload["customer_full_name"],
-            customer_address=payload["customer_address"],
-            customer_phone=payload.get("customer_phone"),
-            status="new",
+        customer = self.get_or_create_customer(
+            full_name=payload["customer_full_name"],
+            address=payload["customer_address"],
+            phone=payload.get("customer_phone"),
         )
+
+        order = Order(customer_id=customer.id, status="new")
         db.session.add(order)
         db.session.flush()
 
@@ -61,8 +72,7 @@ class OrderRepository:
             db.session.add(
                 OrderItem(
                     order_id=order.id,
-                    product_name=line_item["product"].name,
-                    product_price=line_item["price"],
+                    product_id=line_item["product"].id,
                     quantity=line_item["quantity"],
                 )
             )

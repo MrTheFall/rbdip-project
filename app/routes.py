@@ -49,10 +49,10 @@ def list_orders():
         result.append(
             {
                 "id": order.id,
-                "customer_full_name": order.customer_full_name,
+                "customer_full_name": order.customer.full_name,
                 "status": order.status,
                 "items": [
-                    {"product_name": i.product_name, "quantity": i.quantity}
+                    {"product_name": i.product.name, "quantity": i.quantity}
                     for i in items
                 ],
             }
