@@ -8,6 +8,14 @@ def calculate_order_total(items, customer_type="regular", coupon_code=None):
     return PricingCalculator().calculate(items, customer_type, coupon_code)
 
 
+def split_customer_name(full_name):
+    """Splits the single name from the request into first and last name."""
+    parts = full_name.strip().split(" ", 1)
+    first_name = parts[0]
+    last_name = parts[1] if len(parts) > 1 else None
+    return first_name, last_name
+
+
 class OrderValidator:
     """Checks an order request and turns its items into line items.
 
@@ -48,11 +56,17 @@ class OrderRepository:
         return Product.query.get(product_id)
 
     def get_or_create_customer(self, full_name, address, phone):
+        first_name, last_name = split_customer_name(full_name)
         customer = Customer.query.filter_by(
-            full_name=full_name, address=address, phone=phone
+            first_name=first_name, last_name=last_name, address=address, phone=phone
         ).first()
         if customer is None:
-            customer = Customer(full_name=full_name, address=address, phone=phone)
+            customer = Customer(
+                first_name=first_name,
+                last_name=last_name,
+                address=address,
+                phone=phone,
+            )
             db.session.add(customer)
             db.session.flush()
         return customer

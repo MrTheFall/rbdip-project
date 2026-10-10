@@ -14,9 +14,15 @@ class Customer(db.Model):
     __tablename__ = "customers"
 
     id = db.Column(db.Integer, primary_key=True)
-    full_name = db.Column(db.String(255), nullable=False)
+    first_name = db.Column(db.String(255), nullable=False)
+    last_name = db.Column(db.String(255))
     address = db.Column(db.String(500))
     phone = db.Column(db.String(50))
+
+    @property
+    def full_name(self):
+        """Composed for the API, which still exposes a single name field."""
+        return " ".join(part for part in (self.first_name, self.last_name) if part)
 
 
 class Order(db.Model):
