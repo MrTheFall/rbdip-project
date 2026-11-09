@@ -1,7 +1,8 @@
 from flask import Blueprint, jsonify, request
+from sqlalchemy.orm import joinedload
 
 from app.db import db
-from app.models import Order, OrderItem, Product, Review
+from app.models import Order, OrderItem, Product
 from app.services import OrderService
 
 bp = Blueprint("bookstore", __name__)
@@ -40,46 +41,25 @@ def create_order():
 
 @bp.route("/orders", methods=["GET"])
 def list_orders():
-    orders = Order.query.all()
+    # Eager-load the customer and the items with their products so the whole
+    # response is built with a constant number of queries, not one per order.
+    orders = (
+        Order.query.options(
+            joinedload(Order.customer),
+            joinedload(Order.items).joinedload(OrderItem.product),
+        ).all()
+    )
     result = []
     for order in orders:
-        # Each iteration issues a separate query for the order's items
-        # instead of loading them together with the orders in one go.
-        items = OrderItem.query.filter_by(order_id=order.id).all()
         result.append(
             {
                 "id": order.id,
                 "customer_full_name": order.customer.full_name,
                 "status": order.status,
                 "items": [
-                    {"product_name": i.product.name, "quantity": i.quantity}
-                    for i in items
+                    {"product_name": item.product.name, "quantity": item.quantity}
+                    for item in order.items
                 ],
             }
         )
     return jsonify(result)
-
-
-@bp.route("/products/<int:product_id>/reviews", methods=["POST"])
-def add_review(product_id):
-    data = request.get_json(force=True)
-    review = Review(
-        product_id=product_id,
-        author_name=data.get("author_name", "anonymous"),
-        rating=data["rating"],
-        comment=data.get("comment"),
-    )
-    db.session.add(review)
-    db.session.commit()
-    return jsonify({"id": review.id}), 201
-
-
-@bp.route("/products/<int:product_id>/reviews", methods=["GET"])
-def list_reviews(product_id):
-    reviews = Review.query.filter_by(product_id=product_id).all()
-    return jsonify(
-        [
-            {"author_name": r.author_name, "rating": r.rating, "comment": r.comment}
-            for r in reviews
-        ]
-    )
